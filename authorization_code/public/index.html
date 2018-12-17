@@ -29,6 +29,33 @@
         </div>
         <button class="btn btn-default" id="obtain-new-token">Obtain new token using the refresh token</button>
       </div>
+      <div class="media-body">
+        <dl class="dl-horizontal">
+          <dt>Playlist Name</dt><dd><input id="playlist-name" type="text"></dd>
+          <dt>Playlist ID</dt><dd><input id="playlist-id" type="text"></dd>
+        </dl>
+      </div>
+
+      <div class="media-body">
+        <dl class="dl-horizontal">
+          <button id="create-playlist" class="btn btn-primary">Create playlist</button>
+          <button id="get-top-tracks" class="btn btn-primary">Get top tracks</button>
+          <button id="add-top-tracks" class="btn btn-primary">Add top tracks</button>
+        </dl>
+      </div>
+      <div>
+        <h2>Top songs</h2>
+        <div id="playlist">
+          <table id="top-track-table">
+            <tr>
+              <th>Track ID</th>
+              <th>Song Title</th>
+              <th>Artist</th>
+              <th>Image</th>
+              <th>Country</th>
+            </tr>
+          </table>
+        </div>
     </div>
 
     <script id="user-profile-template" type="text/x-handlebars-template">
@@ -92,6 +119,12 @@
             refresh_token = params.refresh_token,
             error = params.error;
 
+        var listOfCountry = ['DZ','AD','AR','AU','AT',,'BE','BO','BR','BG','CA','CL','CO','CR','CY','CZ','DK','DO','EC','EG','SV','EE','FI','FR','DE','GR','GT','HN','HK','HU','IS','ID','IE','IL','IT','JP','JO','KW','LV','LB','LI','LT','LU','MY','MT','MX','NZ','NI','PE','PL','SA','SG','SK','CH','TH','TR','GB','US'];
+
+        //var listOfCountry = ['ID','US'];
+
+        var listOfTopOnEachCountry = [];
+
         if (error) {
           alert('There was an error during the authentication');
         } else {
@@ -135,6 +168,167 @@
             });
           }, false);
         }
+
+        document.getElementById('create-playlist').addEventListener('click', function() {
+          if ($("#playlist-name")[0].value){
+            $.ajax({
+              type: "POST",
+              url: 'https://api.spotify.com/v1/users/1234106617/playlists',
+              headers: {
+                'Authorization': 'Bearer ' + access_token
+              },
+              contentType: 'application/json',
+              data: JSON.stringify({
+                  "name": $("#playlist-name")[0].value,
+                  "description": "New release song on each country (unique). Thanks Spotify API! Country list: " + listOfCountry.join(", "),
+                  "collaborative": false,
+                  "public": false
+              }),
+              success: function(response) {
+                $("#playlist-id")[0].value = response.id;
+                console.log(response);
+              },
+              error: function (xhr) {
+                console.log(xhr);
+              }
+            });
+          } else {
+            alert("playlist name cannot be empty!");
+          }
+
+          
+        }, false);
+
+        var debug;
+        document.getElementById('get-top-tracks').addEventListener('click', function() {
+          listOfTopOnEachCountry = [];
+          $('#top-track-table tbody').remove();
+
+          listOfCountry.forEach(function(countryID, index){
+            console.log("Get top song for " + countryID);
+
+            $.ajax({
+              type: "GET",
+              async: false,
+              url: 'https://api.spotify.com/v1/browse/new-releases',
+              headers: {
+                'Authorization': 'Bearer ' + access_token
+              },
+              data: {
+                  country: countryID,
+                  limit: 1
+              },
+              contentType: 'application/json',
+              success: function(response) {
+                var albumID = response.albums.items[0].id;
+
+                var promise = getTopTrack(albumID);
+                var debugtest = promise.success(function (data) {
+                  var trackID = data.items[0].uri;
+                  var songTitle = data.items[0].name;
+                  var artist = response.albums.items[0].artists[0].name;
+                  var songImageUrl = response.albums.items[0].images[0].url;
+                  var country = countryID;
+
+                  var track = new Object();
+                  track.trackID = trackID;
+                  track.songTitle = songTitle;
+                  track.artist = artist;
+                  track.songImageUrl = songImageUrl;
+                  track.country = country;
+
+                  if (!listOfTopOnEachCountry.some(e => (e.songTitle === track.songTitle) && (e.artist === track.artist))) {
+                    listOfTopOnEachCountry.push(track);
+
+                    var img = $('<img>', {
+                      src: track.songImageUrl,
+                      width: 50,
+                      height: 50
+                    });
+
+                    songList = $('<tr>').append(
+                        $('<td>').text(track.trackID),
+                        $('<td>').text(track.songTitle),
+                        $('<td>').text(track.artist),
+                        $('<td>').append(img),
+                        $('<td>').text(track.country)
+                    );
+
+                    songList.appendTo('#top-track-table');
+                  } else {
+                    console.log("Skipping " + track.songTitle);
+                  }     
+                });
+
+              },
+              error: function (xhr) {
+                
+                console.log(countryID + ' -- ' + xhr.responseJSON.error.message);
+              }
+            });
+          });
+        }, false);
+
+        document.getElementById('add-top-tracks').addEventListener('click', function() {
+          var playlistIdToBeAdded = $("#playlist-id")[0].value;
+          var songToBeAdded = [];
+
+          $('#top-track-table tbody tr').each(function(i, song){
+            var songID = $(song)[0].childNodes[0].textContent;
+            var songTitle = $(song)[0].childNodes[1].textContent;
+            var songArtist = $(song)[0].childNodes[2].textContent;
+
+            console.log("Adding " + songTitle + " by " + songArtist + " --- " + songID);
+            
+            songToBeAdded.push(songID);
+          });
+
+          $.ajax({
+              type: "POST",
+              async: false,
+              url: 'https://api.spotify.com/v1/playlists/'+ playlistIdToBeAdded +'/tracks',
+              headers: {
+                'Authorization': 'Bearer ' + access_token
+              },
+              data: JSON.stringify({
+                  "uris": songToBeAdded
+              }),
+              contentType: 'application/json',
+              success: function(response) {
+                console.log(response);
+              },
+              error: function (xhr) {
+                console.log(xhr);
+              }
+            });
+        }, false);
+
+        var getPlaylist = function(){
+          $.ajax({
+                url: 'https://api.spotify.com/v1/me/playlists',
+                headers: {
+                  'Authorization': 'Bearer ' + access_token
+                },
+                success: function(response) {
+                  console.log(response);
+                }
+            });
+        }
+
+        function getTopTrack(albumID) {
+          //console.log("I will get " + albumID);
+
+          return $.ajax({
+            type: "GET",
+            async: false,
+            url: 'https://api.spotify.com/v1/albums/' + albumID + '/tracks',
+            headers: {
+              'Authorization': 'Bearer ' + access_token
+            },
+            contentType: 'application/json'
+          });
+        }
+
       })();
     </script>
   </body>
