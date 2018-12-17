@@ -1,5 +1,12 @@
 FORK FROM Spotify
 
+Need: process.env value
+{
+  CLIENT_ID = ''; // Your client id
+  CLIENT_SECRET = ''; // Your secret
+  REDIRECT_URI = 'http://localhost:8888/callback/'; // Your redirect uri
+}
+
 # Spotify Accounts Authentication Examples
 
 This project contains basic demos showing the different OAuth 2.0 flows for [authenticating against the Spotify Web API](https://developer.spotify.com/web-api/authorization-guide/).
